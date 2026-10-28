@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ticker }} — StockLens{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+    <!-- Stock Header -->
+    <div class="stock-header" id="stockHeader">
+        <div class="row align-items-end">
+            <div class="col-lg-7">
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <h1 class="company-name mb-0" id="companyName">
+                        <span class="skeleton skeleton-text" style="width:200px;display:inline-block">&nbsp;</span>
+                    </h1>
+                    <span class="ticker-badge" id="tickerBadge">{{ ticker }}</span>
+                </div>
+                <div class="stock-meta" id="stockMeta">
+                    <span class="skeleton skeleton-text" style="width:300px">&nbsp;</span>
+                </div>
+            </div>
+            <div class="col-lg-5 text-lg-end mt-3 mt-lg-0">
+                <div class="price-display" id="priceDisplay">
+                    <span class="skeleton skeleton-text" style="width:150px;display:inline-block">&nbsp;</span>
+                </div>
+                <div class="price-change" id="priceChange"></div>
+                <!-- Action Buttons -->
+                <div class="mt-2" id="actionButtons" style="display:none;">
+                    <button class="btn btn-glass btn-sm" onclick="refreshData()" title="Refresh data">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Price Chart -->
+    <section class="mb-4">
+        <div class="chart-container">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h3 class="mb-0 fs-5 fw-bold">Price Chart</h3>
+                <div class="chart-controls" id="periodControls">
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('1d','5m')">1D</button>
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('5d','30m')">5D</button>
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('1mo','1d')">1M</button>
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('3mo','1d')">3M</button>
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('6mo','1d')">6M</button>
+                    <button class="btn btn-glass btn-sm active" onclick="changePeriod('1y','1d')">1Y</button>
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('5y','1wk')">5Y</button>
+                    <button class="btn btn-glass btn-sm" onclick="changePeriod('max','1mo')">MAX</button>
+                </div>
+            </div>
+            <div id="priceChart" class="plotly-chart">
+                <div class="skeleton skeleton-chart"></div>
+            </div>
+        </div>
+    </section>
+
+    <div class="mb-4">
+        <div class="glass-card-static p-4">
+            <h3 class="fw-bold mb-3"><i class="bi bi-graph-up-arrow me-2 text-accent"></i>Live Market Data</h3>
+            <p class="text-secondary mb-0">Current quote, recent price movement, and the latest market information for <strong>${{ ticker }}</strong>.</p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/stock.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        initStockPage('{{ ticker }}');
+    });
+</script>
+{% endblock %}

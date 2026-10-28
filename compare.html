@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Comparison — StockLens{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Header -->
+    <div class="text-center mb-4">
+        <h1 class="h2 fw-bold mb-2"><i class="bi bi-bar-chart-line text-accent me-2"></i>Stock Comparison</h1>
+        <p class="text-muted">Compare financial metrics and normalized price performance of up to 6 stocks side by side.</p>
+    </div>
+
+    <!-- Ticker Selector Card -->
+    <div class="glass-card mb-4 p-4">
+        <form id="compareForm" onsubmit="return handleCompareSubmit(event)">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-9">
+                    <label class="form-label mb-1">Enter 2 to 6 Ticker Symbols (comma-separated)</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="compareInput"
+                               placeholder="e.g. AAPL, MSFT, NVDA, GOOGL or RELIANCE.NS, TCS.NS"
+                               value="AAPL, MSFT, NVDA, GOOGL" required>
+                    </div>
+                </div>
+                <div class="col-md-3 mt-md-4 pt-md-2">
+                    <button type="submit" class="btn btn-accent w-100" id="compareSubmitBtn">
+                        <i class="bi bi-arrow-repeat me-1"></i>Compare Stocks
+                    </button>
+                </div>
+            </div>
+            <!-- Quick Preset Badges -->
+            <div class="mt-3 d-flex gap-2 flex-wrap align-items-center">
+                <span class="text-muted fs-sm">Quick Presets:</span>
+                <button type="button" class="btn btn-glass btn-sm py-0 px-2 fs-sm" onclick="setPreset('AAPL, MSFT, GOOGL, NVDA')">Big Tech (US)</button>
+                <button type="button" class="btn btn-glass btn-sm py-0 px-2 fs-sm" onclick="setPreset('RELIANCE.NS, TCS.NS, INFY.NS, HDFCBANK.NS')">India Bluechips</button>
+                <button type="button" class="btn btn-glass btn-sm py-0 px-2 fs-sm" onclick="setPreset('TSLA, NVDA, AMD')">High Volatility</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Loading State -->
+    <div id="compareLoading" class="text-center py-5 d-none">
+        <div class="spinner-custom mx-auto mb-3"></div>
+        <p class="text-muted">Fetching and analyzing comparison data from Yahoo Finance...</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="compareResults">
+        <!-- Interactive Normalized Chart -->
+        <div class="chart-container mb-4">
+            <h4 class="fs-5 fw-bold mb-3"><i class="bi bi-graph-up me-2"></i>Normalized 1-Year Performance (% Change)</h4>
+            <div id="comparisonChart" class="plotly-chart" style="min-height: 400px;">
+                <div class="skeleton skeleton-chart"></div>
+            </div>
+        </div>
+
+        <!-- Metrics Comparison Table -->
+        <div class="glass-card p-0 overflow-hidden mb-4">
+            <div class="p-3 border-bottom border-subtle">
+                <h4 class="fs-5 fw-bold mb-0"><i class="bi bi-table me-2"></i>Side-by-Side Financial Metrics</h4>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-custom table-hover align-middle mb-0" id="comparisonTable">
+                    <thead id="comparisonTableHead">
+                        <!-- Dynamic columns -->
+                    </thead>
+                    <tbody id="comparisonTableBody">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="text-muted fs-sm text-center">
+            <i class="bi bi-info-circle me-1"></i> Data presented objectively for user evaluation. StockLens does not endorse or give buy/sell verdicts.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function setPreset(tickers) {
+        document.getElementById('compareInput').value = tickers;
+        loadComparison(tickers);
+    }
+
+    function handleCompareSubmit(e) {
+        e.preventDefault();
+        const input = document.getElementById('compareInput').value.trim();
+        if (input) {
+            loadComparison(input);
+        }
+        return false;
+    }
+
+    async function loadComparison(tickersStr) {
+        const loading = document.getElementById('compareLoading');
+        const results = document.getElementById('compareResults');
+        loading.classList.remove('d-none');
+        results.classList.add('opacity-25');
+
+        try {
+            const res = await API.get(`/api/compare?tickers=${encodeURIComponent(tickersStr)}`);
+            const comparison = res.comparison || [];
+
+            if (!comparison || comparison.length === 0) {
+                showToast('No comparison data returned.', 'warning');
+                return;
+            }
+
+            renderComparisonChart(comparison);
+            renderComparisonTable(comparison);
+        } catch (err) {
+            showToast(`Comparison error: ${err.message}`, 'error');
+        } finally {
+            loading.classList.add('d-none');
+            results.classList.remove('opacity-25');
+        }
+    }
+
+    function renderComparisonChart(stocks) {
+        const chartEl = document.getElementById('comparisonChart');
+        const traces = [];
+        const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
+
+        stocks.forEach((stock, idx) => {
+            if (stock.chartData && stock.chartData.dates && stock.chartData.normalized) {
+                traces.push({
+                    x: stock.chartData.dates,
+                    y: stock.chartData.normalized,
+                    mode: 'lines',
+                    name: stock.symbol,
+                    line: { color: colors[idx % colors.length], width: 2 },
+                    hovertemplate: `<b>${stock.symbol}</b>: %{y:.2f}%<extra></extra>`
+                });
+            }
+        });
+
+        if (traces.length === 0) {
+            chartEl.innerHTML = '<div class="empty-state"><p>No chart data available for comparison.</p></div>';
+            return;
+        }
+
+        const layout = getPlotlyLayout('', {
+            height: 420,
+            margin: { l: 50, r: 20, t: 20, b: 40 },
+            yaxis: {
+                title: { text: '% Return from 1Y Ago', font: { size: 12 } },
+                ticksuffix: '%'
+            },
+            legend: { orientation: 'h', y: -0.15 }
+        });
+
+        chartEl.innerHTML = '';
+        Plotly.newPlot('comparisonChart', traces, layout, getPlotlyConfig());
+    }
+
+    function renderComparisonTable(stocks) {
+        const head = document.getElementById('comparisonTableHead');
+        const body = document.getElementById('comparisonTableBody');
+
+        // Header row
+        head.innerHTML = `
+            <tr>
+                <th style="min-width: 180px;">Metric</th>
+                ${stocks.map(s => `
+                    <th class="text-end" style="min-width: 130px;">
+                        <a href="/stock/${s.symbol}" class="text-accent fw-bold text-decoration-none">${s.symbol}</a>
+                        <div class="text-muted fs-sm fw-normal text-truncate" style="max-width: 140px;">${s.shortName || ''}</div>
+                    </th>
+                `).join('')}
+            </tr>
+        `;
+
+        // Rows definitions
+        const rowsConfig = [
+            { label: 'Current Price', format: s => s.price != null ? formatCurrency(s.price, s.currency) : 'N/A' },
+            { label: 'Daily Change', format: s => s.changePercent != null ? `<span class="${changeClass(s.changePercent)}">${formatPercent(s.changePercent)}</span>` : 'N/A' },
+            { label: 'Market Cap', format: s => s.marketCap ? formatLargeNumber(s.marketCap) : 'N/A' },
+            { label: 'Trailing P/E', format: s => s.trailingPE ? formatNumber(s.trailingPE, 2) : 'N/A' },
+            { label: 'EPS', format: s => s.trailingEps ? formatNumber(s.trailingEps, 2) : 'N/A' },
+            { label: 'Revenue (TTM)', format: s => s.revenue ? formatLargeNumber(s.revenue) : 'N/A' },
+            { label: 'Profit Margin', format: s => s.profitMargins != null ? formatPercentRaw(s.profitMargins) : 'N/A' },
+            { label: '1-Month Return', format: s => s.return_1m != null ? `<span class="${changeClass(s.return_1m)}">${formatPercent(s.return_1m)}</span>` : 'N/A' },
+            { label: '1-Year Return', format: s => s.return_1y != null ? `<span class="${changeClass(s.return_1y)}">${formatPercent(s.return_1y)}</span>` : 'N/A' },
+            { label: 'Annual Volatility', format: s => s.volatility != null ? `${s.volatility}%` : 'N/A' },
+            { label: 'Beta', format: s => s.beta != null ? formatNumber(s.beta, 2) : 'N/A' },
+            { label: 'Dividend Yield', format: s => s.dividendYield != null ? formatPercentRaw(s.dividendYield) : 'N/A' },
+        ];
+
+        body.innerHTML = rowsConfig.map(r => `
+            <tr>
+                <td class="fw-semibold text-secondary">${r.label}</td>
+                ${stocks.map(s => `<td class="text-end">${r.format(s)}</td>`).join('')}
+            </tr>
+        `).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadComparison('AAPL, MSFT, NVDA, GOOGL');
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — StockLens{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-speedometer2 text-accent me-2"></i>Investor Dashboard</h1>
+            <p class="text-secondary mb-0">Monitor your real-time portfolio performance, active watchlists, and AI stock price predictions.</p>
+        </div>
+        <div id="dashActionBtns" class="d-flex gap-2 align-items-center">
+            <button class="btn btn-glass btn-sm" onclick="refreshDashboard()" title="Refresh Dashboard">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- System Status Bar -->
+    <div class="glass-card-static p-2 px-3 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2 fs-8">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="d-flex align-items-center gap-1" id="dbStatusBadge">
+                <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle"><i class="bi bi-database me-1"></i>Database: Connected</span>
+            </span>
+            <span class="d-flex align-items-center gap-1" id="marketStatusBadge">
+                <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle"><i class="bi bi-activity me-1"></i>Market Data: Yahoo Finance (Real)</span>
+            </span>
+            <span class="d-flex align-items-center gap-1">
+                <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-cpu me-1"></i>ML Engine: Random Forest</span>
+            </span>
+        </div>
+        <div class="text-muted fs-8" id="systemTimestamp">
+            <i class="bi bi-clock me-1"></i>Status: Active
+        </div>
+    </div>
+
+    <div id="authContent">
+        <!-- ═══════════════════════════════════════════════════════════════════ -->
+        <!-- ML STOCK PRICE PREDICTION SECTION -->
+        <!-- ═══════════════════════════════════════════════════════════════════ -->
+        <div class="glass-card-static p-4 mb-4" id="predictionSection">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h2 class="h5 fw-bold mb-1">
+                        <i class="bi bi-cpu me-2 text-accent"></i>Machine Learning Stock Price Prediction
+                    </h2>
+                    <p class="text-secondary fs-7 mb-0">
+                        Real-time Random Forest regression model trained on historical OHLCV, momentum, volatility, and volume indicators.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Stock Symbol Selector -->
+            <div class="p-3 mb-4 rounded-3" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color);">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label fs-8 text-muted mb-1">Select or Enter Symbol</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="predTickerInput" value="AAPL" placeholder="e.g. AAPL, MSFT, NVDA" style="text-transform: uppercase;">
+                            <button class="btn btn-accent" id="btnRunPrediction" onclick="runPrediction()">
+                                <i class="bi bi-magic me-1"></i>Predict
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fs-8 text-muted mb-1">Quick Select Popular Tickers</label>
+                        <div class="d-flex gap-1 flex-wrap" id="quickTickerPills">
+                            <button class="btn btn-glass btn-sm active" onclick="selectQuickTicker('AAPL')">AAPL</button>
+                            <button class="btn btn-glass btn-sm" onclick="selectQuickTicker('MSFT')">MSFT</button>
+                            <button class="btn btn-glass btn-sm" onclick="selectQuickTicker('GOOGL')">GOOGL</button>
+                            <button class="btn btn-glass btn-sm" onclick="selectQuickTicker('AMZN')">AMZN</button>
+                            <button class="btn btn-glass btn-sm" onclick="selectQuickTicker('TSLA')">TSLA</button>
+                            <button class="btn btn-glass btn-sm" onclick="selectQuickTicker('NVDA')">NVDA</button>
+                            <button class="btn btn-glass btn-sm" onclick="selectQuickTicker('META')">META</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prediction Loading State -->
+            <div id="predLoading" class="text-center py-5 d-none">
+                <div class="spinner-custom mx-auto"></div>
+                <p class="loading-text mt-3">Fetching real historical market data & training machine learning model...</p>
+                <div class="text-muted fs-8">Calculating SMA, EMA, RSI, MACD, volatility and tree splits without data leakage</div>
+            </div>
+
+            <!-- Prediction Error State -->
+            <div id="predError" class="d-none mb-3"></div>
+
+            <!-- Prediction Content (Populated by JS) -->
+            <div id="predContent">
+                <!-- Top Summary Cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3 col-sm-6">
+                        <div class="glass-card-static p-3 text-center h-100 border-accent">
+                            <span class="text-muted fs-8 text-uppercase fw-semibold">Predicted Next Price</span>
+                            <div class="fs-3 fw-bold mt-1 text-accent" id="predTargetPrice">$0.00</div>
+                            <div class="fs-8 mt-1" id="predTargetDate">Target: Next Trading Day</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="glass-card-static p-3 text-center h-100">
+                            <span class="text-muted fs-8 text-uppercase fw-semibold">Current Market Price</span>
+                            <div class="fs-3 fw-bold mt-1" id="predCurrentPrice">$0.00</div>
+                            <div class="text-muted fs-8 mt-1" id="predCurrentDate">As of last close</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="glass-card-static p-3 text-center h-100">
+                            <span class="text-muted fs-8 text-uppercase fw-semibold">Predicted Movement</span>
+                            <div class="fs-3 fw-bold mt-1" id="predChange">$0.00 (0.00%)</div>
+                            <div class="mt-1" id="predDirectionBadge">
+                                <span class="badge bg-secondary">Neutral</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="glass-card-static p-3 text-center h-100">
+                            <span class="text-muted fs-8 text-uppercase fw-semibold">Estimated Range</span>
+                            <div class="fs-4 fw-bold mt-1" id="predConfidenceInterval">$0 - $0</div>
+                            <div class="text-muted fs-8 mt-1">±1.96× RMSE Uncertainty</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Model Evaluation Metrics Cards -->
+                <div class="row g-2 mb-4">
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 px-3 rounded-2 text-center" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
+                            <div class="text-muted fs-8">Directional Accuracy</div>
+                            <div class="fs-5 fw-bold text-success-custom mt-1" id="metricDirAcc">0.0%</div>
+                            <div class="text-muted fs-8">Correct trend predictions</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 px-3 rounded-2 text-center" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
+                            <div class="text-muted fs-8">Mean Absolute Error (MAE)</div>
+                            <div class="fs-5 fw-bold mt-1" id="metricMae">$0.00</div>
+                            <div class="text-muted fs-8">Average dollar error</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 px-3 rounded-2 text-center" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
+                            <div class="text-muted fs-8">RMSE</div>
+                            <div class="fs-5 fw-bold mt-1" id="metricRmse">$0.00</div>
+                            <div class="text-muted fs-8">Root mean squared error</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 px-3 rounded-2 text-center" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
+                            <div class="text-muted fs-8">R² Coefficient</div>
+                            <div class="fs-5 fw-bold mt-1" id="metricR2">0.00</div>
+                            <div class="text-muted fs-8">Variance explained</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prediction Chart -->
+                <div class="chart-container mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <h6 class="fw-bold mb-0">Model Predictions vs Actual Historical Prices (Unseen Test Data)</h6>
+                        <span class="badge bg-secondary-subtle text-body-secondary fs-8" id="modelBadge">Random Forest Regressor</span>
+                    </div>
+                    <div id="predictionChart" class="plotly-chart" style="min-height: 340px;">
+                        <div class="skeleton skeleton-chart" style="height: 340px;"></div>
+                    </div>
+                </div>
+
+                <!-- Financial Uncertainty Disclaimer -->
+                <div class="p-3 rounded-3" style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.2); color: var(--text-secondary);">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-shield-exclamation text-warning fs-5 flex-shrink-0 mt-1"></i>
+                        <div class="fs-8">
+                            <strong class="text-warning">Important Financial Disclaimer:</strong>
+                            Stock market predictions are statistical estimates derived from historical price patterns and technical features.
+                            Financial markets are inherently uncertain, volatile, and subject to unforeseen real-world macroeconomic and corporate events.
+                            Past performance does not guarantee future results. This tool is designed strictly for informational and educational purposes and does not constitute financial, investment, or trading advice.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prediction History Section (Stored in Database) -->
+        <div class="glass-card-static p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h2 class="h5 fw-bold mb-1"><i class="bi bi-clock-history me-2 text-info"></i>Saved Prediction History</h2>
+                    <p class="text-secondary fs-7 mb-0">Past machine-learning price predictions stored in the database.</p>
+                </div>
+                <button class="btn btn-glass btn-sm" onclick="loadPredictionHistory()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh History
+                </button>
+            </div>
+            <div class="table-responsive" id="predictionHistoryContainer">
+                <div class="skeleton skeleton-card"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

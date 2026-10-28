@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}StockLens — Analyze. Understand. Track.{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container hero-content">
+        <div class="hero-logo">
+            <i class="bi bi-graph-up-arrow"></i>
+        </div>
+        <h1 class="hero-title">Stock<span class="brand-accent">Lens</span></h1>
+        <p class="hero-tagline"><span>Analyze.</span> <span>Understand.</span> <span>Track.</span></p>
+
+        <!-- Hero Search -->
+        <div class="hero-search">
+            <form id="heroSearchForm" onsubmit="return handleHeroSearch(event)">
+                <div class="input-group">
+                    <span class="input-group-text search-icon"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="heroSearchInput"
+                           placeholder="Enter a ticker symbol (e.g. AAPL, MSFT, RELIANCE.NS, 005930.KS)"
+                           autocomplete="off" aria-label="Search stock ticker">
+                    <button class="btn btn-accent" type="submit" id="heroSearchBtn">
+                        <i class="bi bi-arrow-right me-1"></i>Analyze
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<div class="container">
+    <!-- Market Overview -->
+    <section class="mb-5 fade-in">
+        <h2 class="section-title"><i class="bi bi-globe2"></i> Market Overview</h2>
+        <div class="row g-3" id="marketOverview">
+            <!-- Populated by JS -->
+            <div class="col-6 col-md-4 col-lg"><div class="skeleton skeleton-card"></div></div>
+            <div class="col-6 col-md-4 col-lg"><div class="skeleton skeleton-card"></div></div>
+            <div class="col-6 col-md-4 col-lg"><div class="skeleton skeleton-card"></div></div>
+            <div class="col-6 col-md-4 col-lg"><div class="skeleton skeleton-card"></div></div>
+            <div class="col-6 col-md-4 col-lg"><div class="skeleton skeleton-card"></div></div>
+        </div>
+    </section>
+
+    <!-- Popular Stocks -->
+    <section class="mb-5 fade-in">
+        <h2 class="section-title"><i class="bi bi-star"></i> Popular Stocks</h2>
+        <p class="section-subtitle">Click any stock to view detailed analysis</p>
+        <div class="stock-grid" id="popularStocks">
+            <!-- Populated by JS -->
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const POPULAR_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX'];
+
+    function handleHeroSearch(e) {
+        e.preventDefault();
+        const input = document.getElementById('heroSearchInput');
+        const query = input.value.trim().toUpperCase();
+        if (!query) {
+            showToast('Please enter a ticker symbol.', 'warning');
+            return false;
+        }
+        window.location.href = '/stock/' + encodeURIComponent(query);
+        return false;
+    }
+
+    // ─── Load Market Overview ───
+    async function loadMarketOverview() {
+        const container = document.getElementById('marketOverview');
+        try {
+            const data = await API.get('/api/market/overview');
+            if (!data.indices || data.indices.length === 0) {
+                container.innerHTML = '<div class="col-12"><div class="error-message">Market data temporarily unavailable.</div></div>';
+                return;
+            }
+
+            container.innerHTML = data.indices.map(idx => {
+                const chgClass = idx.change >= 0 ? 'text-success-custom' : 'text-danger-custom';
+                const icon = idx.change >= 0 ? 'bi-caret-up-fill' : 'bi-caret-down-fill';
+                const sparkId = 'spark-' + idx.symbol.replace(/[^a-zA-Z0-9]/g, '');
+
+                return `
+                    <div class="col-6 col-md-4 col-lg fade-in">
+                        <div class="index-card">
+                            <div class="index-name">${idx.name}</div>
+                            <div class="index-value">${idx.price != null ? formatNumber(idx.price, idx.price > 10000 ? 0 : 2) : 'N/A'}</div>
+                            <div class="index-change ${chgClass}">
+                                <i class="bi ${icon}"></i>
+                                ${idx.change != null ? formatNumber(Math.abs(idx.change), 2) : ''}
+                                (${idx.changePercent != null ? formatPercent(idx.changePercent) : 'N/A'})
+                            </div>
+                            <div class="sparkline-container" id="${sparkId}"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Render sparklines
+            data.indices.forEach(idx => {
+                if (idx.chartData && idx.chartData.length > 0) {
+                    const sparkId = 'spark-' + idx.symbol.replace(/[^a-zA-Z0-9]/g, '');
+                    const color = idx.change >= 0 ? '#10b981' : '#ef4444';
+                    Plotly.newPlot(sparkId, [{
+                        y: idx.chartData,
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: color, width: 2 },
+                        fill: 'tozeroy',
+                        fillcolor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
+                        hoverinfo: 'skip'
+                    }], {
+                        margin: { l: 0, r: 0, t: 0, b: 0 },
+                        xaxis: { visible: false },
+                        yaxis: { visible: false },
+                        paper_bgcolor: 'transparent',
+                        plot_bgcolor: 'transparent',
+                        showlegend: false,
+                        height: 40,
+                    }, { displayModeBar: false, responsive: true, staticPlot: true });
+                }
+            });
+        } catch (err) {
+            container.innerHTML = `<div class="col-12"><div class="error-message"><i class="bi bi-exclamation-triangle me-2"></i>${err.message}</div></div>`;
+        }
+    }
+
+    // ─── Load Popular Stocks ───
+    async function loadPopularStocks() {
+        const container = document.getElementById('popularStocks');
+        const results = [];
+
+        // Load in parallel
+        const promises = POPULAR_TICKERS.map(async ticker => {
+            try {
+                const data = await API.get('/api/stock/' + ticker + '/price');
+                return data;
+            } catch {
+                return { symbol: ticker, price: null, change: null, changePercent: null };
+            }
+        });
+
+        const allData = await Promise.allSettled(promises);
+
+        allData.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+                results.push(result.value);
+            }
+        });
+
+        if (results.length === 0) {
+            container.innerHTML = '<div class="error-message">Unable to load stock data. Please try again.</div>';
+            return;
+        }
+
+        container.innerHTML = results.map(stock => {
+            const chgClass = (stock.change || 0) >= 0 ? 'text-success-custom' : 'text-danger-custom';
+            const icon = (stock.change || 0) >= 0 ? 'bi-caret-up-fill' : 'bi-caret-down-fill';
+            const currency = stock.currency || 'USD';
+
+            return `
+                <a href="/stock/${stock.symbol}" class="stock-card fade-in">
+                    <div class="stock-symbol">${stock.symbol}</div>
+                    <div class="stock-name">${stock.shortName || stock.symbol}</div>
+                    <div class="stock-price">${stock.price != null ? formatCurrency(stock.price, currency) : 'N/A'}</div>
+                    <div class="stock-change ${chgClass}">
+                        <i class="bi ${icon}"></i>
+                        ${stock.change != null ? formatNumber(Math.abs(stock.change), 2) : ''}
+                        (${stock.changePercent != null ? formatPercent(stock.changePercent) : 'N/A'})
+                    </div>
+                </a>
+            `;
+        }).join('');
+    }
+
+    // ─── Init ───
+    document.addEventListener('DOMContentLoaded', () => {
+        loadMarketOverview();
+        loadPopularStocks();
+    });
+</script>
+{% endblock %}
